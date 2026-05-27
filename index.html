@@ -15,44 +15,35 @@
     overflow: hidden;
     font-family: Georgia, serif;
   }
-  canvas {
-    position: fixed;
-    top: 0; left: 0;
-  }
+  canvas { position: fixed; top: 0; left: 0; }
   #btn {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     background: transparent;
-    border: 2px solid #ff2d55;
-    color: #ff2d55;
+    border: none;
+    outline: none;
+    color: #ffffff;
     font-family: Georgia, serif;
     font-style: italic;
-    font-size: 18px;
-    padding: 12px 24px;
-    border-radius: 30px;
+    font-size: 20px;
     cursor: pointer;
     z-index: 10;
-    text-shadow: 0 0 10px #ff2d55;
-    box-shadow: 0 0 16px #ff2d5566;
-    transition: all 0.2s;
+    text-shadow: 0 0 12px #ff2d55, 0 0 24px #ff2d55, 0 0 40px #ff6b8a;
+    animation: pulse 2s ease-in-out infinite;
+    padding: 0;
   }
-  #btn:hover {
-    background: #ff2d5522;
-    box-shadow: 0 0 28px #ff2d55aa;
+  @keyframes pulse {
+    0%, 100% { text-shadow: 0 0 10px #ff2d55, 0 0 22px #ff2d55, 0 0 38px #ff6b8a; }
+    50%       { text-shadow: 0 0 18px #ff2d55, 0 0 36px #ff2d55, 0 0 60px #ff6b8a; }
   }
-  #btn.hidden {
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.8s;
-  }
+  #btn.hidden { opacity: 0; pointer-events: none; transition: opacity 0.8s; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <button id="btn">I love you</button>
-
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -78,14 +69,14 @@ function getHeartPoints(n) {
 }
 
 const pts = getHeartPoints(TOTAL);
-const texts = ['I love you','I love you','I love you','te amo','I love you','I love you'];
+const texts = ['I love you','I love you','te amo','I love you','I love you','I love you'];
 const pinks  = ['#ff2d55','#ff6b8a','#ffb3c6','#ff4d6d','#ffffff','#ff85a1'];
 
 const pointData = pts.map((p, i) => ({
   x: p.x, y: p.y,
-  text:  texts[i % texts.length],
+  text: texts[i % texts.length],
   color: pinks[Math.floor(Math.random() * pinks.length)],
-  size:  7 + Math.random() * 6,
+  size: 7 + Math.random() * 6,
 }));
 
 const WAVE_WIDTH = 60;
@@ -107,22 +98,22 @@ const nicolls = Array.from({ length: 10 }, () => ({
 let burst = [];
 let bursting = false;
 
-// Pre-generar una cuadrícula densa de posiciones para cubrir toda la pantalla
-function generateGridPositions() {
+function generatePositions() {
   const positions = [];
-  const colW = 90;
-  const rowH = 28;
-  const cols = Math.ceil(W / colW) + 1;
-  const rows = Math.ceil(H / rowH) + 1;
+  const colW = 68;
+  const rowH = 16;
+  const cols = Math.ceil(W / colW) + 2;
+  const rows = Math.ceil(H / rowH) + 2;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
+      const offsetX = (r % 2 === 0) ? 0 : colW * 0.5;
       positions.push({
-        x: c * colW + (r % 2 === 0 ? 0 : colW / 2) + (Math.random() * 20 - 10),
-        y: r * rowH + (Math.random() * 10 - 5),
+        x: c * colW + offsetX - colW + (Math.random() * 8 - 4),
+        y: r * rowH + (Math.random() * 4 - 2),
+        size: 11 + Math.random() * 5,
       });
     }
   }
-  // Mezclar aleatoriamente para que aparezcan en orden random
   for (let i = positions.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [positions[i], positions[j]] = [positions[j], positions[i]];
@@ -135,26 +126,24 @@ document.getElementById('btn').addEventListener('click', function() {
   bursting = true;
   this.classList.add('hidden');
 
-  const positions = generateGridPositions();
+  const positions = generatePositions();
   let idx = 0;
 
   const interval = setInterval(() => {
-    // Spawnear varios a la vez para que llene rápido pero orgánicamente
-    for (let k = 0; k < 6; k++) {
+    for (let k = 0; k < 12; k++) {
       if (idx >= positions.length) { clearInterval(interval); return; }
       const pos = positions[idx++];
       burst.push({
-        x: pos.x,
-        y: pos.y,
+        x: pos.x, y: pos.y,
         alpha: 0,
-        size: 9 + Math.random() * 14,
+        size: pos.size,
         color: pinks[Math.floor(Math.random() * pinks.length)],
         text: texts[Math.floor(Math.random() * texts.length)],
-        fadeSpeed: 0.008 + Math.random() * 0.014,
-        delayLeft: Math.random() * 0.3,
+        fadeSpeed: 0.01 + Math.random() * 0.015,
+        delayLeft: Math.random() * 0.4,
       });
     }
-  }, 60);
+  }, 40);
 });
 
 function waveAlpha(waveHead, idx) {
@@ -168,10 +157,8 @@ let last = performance.now();
 function loop(now) {
   const dt = (now - last) / 1000;
   last = now;
-
   ctx.clearRect(0, 0, W, H);
 
-  // Olas del corazón
   wave1 = (wave1 + WAVE_SPEED * dt) % TOTAL;
   const wave2 = (wave1 + WAVE_OFFSET) % TOTAL;
 
@@ -190,7 +177,6 @@ function loop(now) {
     ctx.restore();
   }
 
-  // Nicolls flotando
   for (const n of nicolls) {
     n.x += n.vx; n.y += n.vy;
     if (n.x < 0 || n.x > W) n.vx *= -1;
@@ -208,19 +194,18 @@ function loop(now) {
     ctx.restore();
   }
 
-  // Explosión llenando pantalla
   for (const b of burst) {
     if (b.delayLeft > 0) { b.delayLeft -= dt; continue; }
-    if (b.alpha < 0.92) {
+    if (b.alpha < 1) {
       b.alpha += b.fadeSpeed * 60 * dt;
-      if (b.alpha > 0.92) b.alpha = 0.92;
+      if (b.alpha > 1) b.alpha = 1;
     }
     ctx.save();
     ctx.globalAlpha = b.alpha;
     ctx.font = `italic ${b.size}px Georgia, serif`;
     ctx.fillStyle = b.color;
     ctx.shadowColor = b.color;
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 6;
     ctx.fillText(b.text, b.x, b.y);
     ctx.restore();
   }
