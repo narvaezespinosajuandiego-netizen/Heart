@@ -13,12 +13,46 @@
     align-items: center;
     min-height: 100vh;
     overflow: hidden;
+    font-family: Georgia, serif;
   }
-  canvas { display: block; }
+  canvas {
+    position: fixed;
+    top: 0; left: 0;
+  }
+  #btn {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: transparent;
+    border: 2px solid #ff2d55;
+    color: #ff2d55;
+    font-family: Georgia, serif;
+    font-style: italic;
+    font-size: 18px;
+    padding: 12px 24px;
+    border-radius: 30px;
+    cursor: pointer;
+    z-index: 10;
+    text-shadow: 0 0 10px #ff2d55;
+    box-shadow: 0 0 16px #ff2d5566;
+    transition: all 0.2s;
+  }
+  #btn:hover {
+    background: #ff2d5522;
+    box-shadow: 0 0 28px #ff2d55aa;
+  }
+  #btn.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.8s;
+  }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<button id="btn">I love you</button>
+
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -30,7 +64,6 @@ const H = canvas.height;
 const scale = Math.min(W, H) / 48;
 const cx = W / 2;
 const cy = H / 2 + scale;
-
 const TOTAL = 120;
 
 function getHeartPoints(n) {
@@ -45,30 +78,24 @@ function getHeartPoints(n) {
 }
 
 const pts = getHeartPoints(TOTAL);
-
 const texts = ['I love you','I love you','I love you','te amo','I love you'];
 const pinks  = ['#ff2d55','#ff6b8a','#ffb3c6','#ff4d6d','#ffffff'];
 
 const pointData = pts.map((p, i) => ({
-  x: p.x,
-  y: p.y,
+  x: p.x, y: p.y,
   text:  texts[i % texts.length],
   color: pinks[Math.floor(Math.random() * pinks.length)],
-  size: 7 + Math.random() * 6,
+  size:  7 + Math.random() * 6,
 }));
 
-// Dos olas en la misma dirección, separadas por TOTAL/2
-const WAVE_WIDTH = 60;  // ancho de cada ola en puntos
-const WAVE_SPEED = 25;  // velocidad
-const WAVE_OFFSET = TOTAL / 2; // separación entre ola 1 y ola 2
-
+const WAVE_WIDTH = 60;
+const WAVE_SPEED = 25;
+const WAVE_OFFSET = TOTAL / 2;
 let wave1 = 0;
-let last = performance.now();
 
 // Nicolls flotando
 const nicolls = Array.from({ length: 10 }, () => ({
-  x: Math.random() * W,
-  y: Math.random() * H,
+  x: Math.random() * W, y: Math.random() * H,
   vx: (Math.random() - 0.5) * 0.5,
   vy: (Math.random() - 0.5) * 0.5,
   alpha: Math.random(),
@@ -78,13 +105,48 @@ const nicolls = Array.from({ length: 10 }, () => ({
   color: pinks[Math.floor(Math.random() * pinks.length)],
 }));
 
+// Partículas explosión al presionar botón
+let burst = [];
+let bursting = false;
+let burstInterval = null;
+
+function spawnBurstWord() {
+  burst.push({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    alpha: 0,
+    alphaDir: 1,
+    size: 11 + Math.random() * 22,
+    color: pinks[Math.floor(Math.random() * pinks.length)],
+    text: texts[Math.floor(Math.random() * texts.length)],
+    speed: 0.008 + Math.random() * 0.012,
+    delay: Math.random() * 0.5,
+    delayLeft: Math.random() * 0.5,
+  });
+}
+
+document.getElementById('btn').addEventListener('click', function() {
+  if (bursting) return;
+  bursting = true;
+  this.classList.add('hidden');
+
+  // Ir llenando la pantalla progresivamente
+  let spawned = 0;
+  const maxWords = 120;
+  burstInterval = setInterval(() => {
+    for (let i = 0; i < 3; i++) spawnBurstWord();
+    spawned += 3;
+    if (spawned >= maxWords) clearInterval(burstInterval);
+  }, 80);
+});
+
 function waveAlpha(waveHead, idx) {
-  // Distancia circular desde idx hasta waveHead (cuánto "atrás" está idx de la cabeza)
   let dist = (waveHead - idx + TOTAL) % TOTAL;
   if (dist > WAVE_WIDTH) return 0;
-  // Campana: sube al inicio, baja al final
   return Math.sin((dist / WAVE_WIDTH) * Math.PI);
 }
+
+let last = performance.now();
 
 function loop(now) {
   const dt = (now - last) / 1000;
@@ -92,21 +154,15 @@ function loop(now) {
 
   ctx.clearRect(0, 0, W, H);
 
+  // Olas del corazón
   wave1 = (wave1 + WAVE_SPEED * dt) % TOTAL;
   const wave2 = (wave1 + WAVE_OFFSET) % TOTAL;
 
   for (let i = 0; i < TOTAL; i++) {
     const pd = pointData[i];
-
-    const a1 = waveAlpha(wave1, i);
-    const a2 = waveAlpha(wave2, i);
-    const alpha = Math.max(a1, a2);
-
+    const alpha = Math.max(waveAlpha(wave1, i), waveAlpha(wave2, i));
     if (alpha <= 0) continue;
-
-    // Tamaño crece con alpha para dar sensación de profundidad
     const size = pd.size * (0.6 + 0.8 * alpha);
-
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.font = `italic ${size}px Georgia, serif`;
@@ -119,14 +175,12 @@ function loop(now) {
 
   // Nicolls flotando
   for (const n of nicolls) {
-    n.x += n.vx;
-    n.y += n.vy;
+    n.x += n.vx; n.y += n.vy;
     if (n.x < 0 || n.x > W) n.vx *= -1;
     if (n.y < 0 || n.y > H) n.vy *= -1;
     n.alpha += n.alphaDir * n.alphaSpeed;
-    if (n.alpha >= 0.8) { n.alpha = 0.8; n.alphaDir = -1; }
-    if (n.alpha <= 0.05) { n.alpha = 0.05; n.alphaDir = 1; }
-
+    if (n.alpha >= 0.8)  { n.alpha = 0.8;  n.alphaDir = -1; }
+    if (n.alpha <= 0.05) { n.alpha = 0.05; n.alphaDir =  1; }
     ctx.save();
     ctx.globalAlpha = n.alpha;
     ctx.font = `italic ${n.size}px Georgia, serif`;
@@ -134,6 +188,25 @@ function loop(now) {
     ctx.shadowColor = n.color;
     ctx.shadowBlur = 8;
     ctx.fillText('Nicoll', n.x, n.y);
+    ctx.restore();
+  }
+
+  // Explosión de palabras
+  for (const b of burst) {
+    if (b.delayLeft > 0) { b.delayLeft -= dt; continue; }
+
+    if (b.alphaDir === 1) {
+      b.alpha += b.speed * 60 * dt;
+      if (b.alpha >= 0.9) { b.alpha = 0.9; b.alphaDir = 0; } // se queda fijo
+    }
+
+    ctx.save();
+    ctx.globalAlpha = b.alpha;
+    ctx.font = `italic ${b.size}px Georgia, serif`;
+    ctx.fillStyle = b.color;
+    ctx.shadowColor = b.color;
+    ctx.shadowBlur = 10;
+    ctx.fillText(b.text, b.x, b.y);
     ctx.restore();
   }
 
