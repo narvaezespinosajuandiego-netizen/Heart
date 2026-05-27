@@ -22,15 +22,17 @@
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-
 canvas.width  = window.innerWidth;
 canvas.height = window.innerHeight;
-
 const W = canvas.width;
 const H = canvas.height;
 
-// Genera puntos del corazón en orden secuencial
-function getHeartPoints(n, scale, cx, cy) {
+const scale = Math.min(W, H) / 48;
+const cx = W / 2;
+const cy = H / 2 + scale;
+
+// Solo contorno del corazón, un único radio
+function getHeartPoints(n) {
   const pts = [];
   for (let i = 0; i < n; i++) {
     const t = (i / n) * 2 * Math.PI;
@@ -41,50 +43,37 @@ function getHeartPoints(n, scale, cx, cy) {
   return pts;
 }
 
-// También puntos del interior en espiral para llenar
-function getInnerPoints(n, scale, cx, cy) {
-  const pts = [];
-  // Varias "capas" internas del corazón
-  for (let r = 0.85; r > 0.1; r -= 0.18) {
-    const count = Math.floor(n * r);
-    for (let i = 0; i < count; i++) {
-      const t = (i / count) * 2 * Math.PI;
-      const x = 16 * Math.pow(Math.sin(t), 3) * r;
-      const y = -(13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t)) * r;
-      pts.push({ x: cx + x * scale, y: cy + y * scale, layerR: r });
-    }
-  }
-  return pts;
-}
+const pts = getHeartPoints(100);
+const TOTAL = pts.length;
+const WAVE_WIDTH = 40;
+const WAVE_SPEED = 20;
 
-const scale = Math.min(W, H) / 52;
-const cx = W / 2;
-const cy = H / 2 + scale;
+const texts = ['I love you','I love you','I love you','te amo','I love you'];
+const pinks  = ['#ff2d55','#ff6b8a','#ffb3c6','#ff4d6d','#ffffff'];
 
-const borderPts = getHeartPoints(90, scale, cx, cy);
-const innerPts  = getInnerPoints(70, scale, cx, cy);
-const allPts    = [...borderPts, ...innerPts];
-
-const TOTAL = allPts.length;
-
-// La "ola" es una ventana de índices que están encendidos
-// Cada punto tiene un índice; la ola avanza linealmente
-const WAVE_WIDTH = 30;  // cuántos puntos están visibles a la vez
-const WAVE_SPEED = 20;  // puntos por segundo que avanza la ola
-
-const texts = ['I love you', 'I love you', 'I love you', 'te amo', 'I love you'];
-const pinks  = ['#ff2d55','#ff6b8a','#ffb3c6','#ff4d6d','#fff0f3'];
-
-// Asignar texto/color fijo a cada punto
-const pointData = allPts.map((p, i) => ({
+const pointData = pts.map((p, i) => ({
   x: p.x,
   y: p.y,
   text:  texts[i % texts.length],
-  color: pinks[i  % pinks.length],
+  color: pinks[i % pinks.length],
   size:  8 + Math.random() * 5,
 }));
 
-let waveHead = 0; // cabeza de la ola (índice float)
+// Nicolls flotando por la pantalla
+const NICOLL_COUNT = 10;
+const nicolls = Array.from({ length: NICOLL_COUNT }, () => ({
+  x: Math.random() * W,
+  y: Math.random() * H,
+  vx: (Math.random() - 0.5) * 0.6,
+  vy: (Math.random() - 0.5) * 0.6,
+  alpha: Math.random(),
+  alphaDir: Math.random() > 0.5 ? 1 : -1,
+  alphaSpeed: 0.003 + Math.random() * 0.005,
+  size: 13 + Math.random() * 18,
+  color: pinks[Math.floor(Math.random() * pinks.length)],
+}));
+
+let waveHead = 0;
 let last = performance.now();
 
 function loop(now) {
@@ -93,30 +82,49 @@ function loop(now) {
 
   ctx.clearRect(0, 0, W, H);
 
-  // Avanzar la ola
+  // Ola del corazón
   waveHead = (waveHead + WAVE_SPEED * dt) % TOTAL;
 
   for (let i = 0; i < TOTAL; i++) {
     const pd = pointData[i];
-
-    // Distancia circular de este punto a la cabeza de la ola
     let dist = waveHead - i;
     if (dist < 0) dist += TOTAL;
-
-    // Solo los que están dentro de la ventana de la ola
     if (dist > WAVE_WIDTH) continue;
 
-    // Alpha en forma de campana: máximo en el frente, desvanece hacia atrás
-    const t = dist / WAVE_WIDTH;           // 0 = frente, 1 = cola
-    const alpha = Math.sin(t * Math.PI);   // sube y baja suavemente
+    const t = dist / WAVE_WIDTH;
+    const alpha = Math.sin(t * Math.PI);
 
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.font = `italic ${pd.size}px Georgia, serif`;
     ctx.fillStyle = pd.color;
     ctx.shadowColor = pd.color;
-    ctx.shadowBlur = 12 * alpha;
+    ctx.shadowBlur = 10 * alpha;
     ctx.fillText(pd.text, pd.x - 20, pd.y);
+    ctx.restore();
+  }
+
+  // Nicolls flotando
+  for (const n of nicolls) {
+    n.x += n.vx;
+    n.y += n.vy;
+
+    // Rebotar en bordes
+    if (n.x < 0 || n.x > W) n.vx *= -1;
+    if (n.y < 0 || n.y > H) n.vy *= -1;
+
+    // Pulsar alpha
+    n.alpha += n.alphaDir * n.alphaSpeed;
+    if (n.alpha >= 0.85) { n.alpha = 0.85; n.alphaDir = -1; }
+    if (n.alpha <= 0.08) { n.alpha = 0.08; n.alphaDir = 1; }
+
+    ctx.save();
+    ctx.globalAlpha = n.alpha;
+    ctx.font = `italic ${n.size}px Georgia, serif`;
+    ctx.fillStyle = n.color;
+    ctx.shadowColor = n.color;
+    ctx.shadowBlur = 8;
+    ctx.fillText('Nicoll', n.x, n.y);
     ctx.restore();
   }
 
