@@ -78,8 +78,8 @@ function getHeartPoints(n) {
 }
 
 const pts = getHeartPoints(TOTAL);
-const texts = ['I love you','I love you','I love you','te amo','I love you'];
-const pinks  = ['#ff2d55','#ff6b8a','#ffb3c6','#ff4d6d','#ffffff'];
+const texts = ['I love you','I love you','I love you','te amo','I love you','I love you'];
+const pinks  = ['#ff2d55','#ff6b8a','#ffb3c6','#ff4d6d','#ffffff','#ff85a1'];
 
 const pointData = pts.map((p, i) => ({
   x: p.x, y: p.y,
@@ -93,7 +93,6 @@ const WAVE_SPEED = 25;
 const WAVE_OFFSET = TOTAL / 2;
 let wave1 = 0;
 
-// Nicolls flotando
 const nicolls = Array.from({ length: 10 }, () => ({
   x: Math.random() * W, y: Math.random() * H,
   vx: (Math.random() - 0.5) * 0.5,
@@ -105,24 +104,30 @@ const nicolls = Array.from({ length: 10 }, () => ({
   color: pinks[Math.floor(Math.random() * pinks.length)],
 }));
 
-// Partículas explosión al presionar botón
 let burst = [];
 let bursting = false;
-let burstInterval = null;
 
-function spawnBurstWord() {
-  burst.push({
-    x: Math.random() * W,
-    y: Math.random() * H,
-    alpha: 0,
-    alphaDir: 1,
-    size: 11 + Math.random() * 22,
-    color: pinks[Math.floor(Math.random() * pinks.length)],
-    text: texts[Math.floor(Math.random() * texts.length)],
-    speed: 0.008 + Math.random() * 0.012,
-    delay: Math.random() * 0.5,
-    delayLeft: Math.random() * 0.5,
-  });
+// Pre-generar una cuadrícula densa de posiciones para cubrir toda la pantalla
+function generateGridPositions() {
+  const positions = [];
+  const colW = 90;
+  const rowH = 28;
+  const cols = Math.ceil(W / colW) + 1;
+  const rows = Math.ceil(H / rowH) + 1;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      positions.push({
+        x: c * colW + (r % 2 === 0 ? 0 : colW / 2) + (Math.random() * 20 - 10),
+        y: r * rowH + (Math.random() * 10 - 5),
+      });
+    }
+  }
+  // Mezclar aleatoriamente para que aparezcan en orden random
+  for (let i = positions.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [positions[i], positions[j]] = [positions[j], positions[i]];
+  }
+  return positions;
 }
 
 document.getElementById('btn').addEventListener('click', function() {
@@ -130,14 +135,26 @@ document.getElementById('btn').addEventListener('click', function() {
   bursting = true;
   this.classList.add('hidden');
 
-  // Ir llenando la pantalla progresivamente
-  let spawned = 0;
-  const maxWords = 120;
-  burstInterval = setInterval(() => {
-    for (let i = 0; i < 3; i++) spawnBurstWord();
-    spawned += 3;
-    if (spawned >= maxWords) clearInterval(burstInterval);
-  }, 80);
+  const positions = generateGridPositions();
+  let idx = 0;
+
+  const interval = setInterval(() => {
+    // Spawnear varios a la vez para que llene rápido pero orgánicamente
+    for (let k = 0; k < 6; k++) {
+      if (idx >= positions.length) { clearInterval(interval); return; }
+      const pos = positions[idx++];
+      burst.push({
+        x: pos.x,
+        y: pos.y,
+        alpha: 0,
+        size: 9 + Math.random() * 14,
+        color: pinks[Math.floor(Math.random() * pinks.length)],
+        text: texts[Math.floor(Math.random() * texts.length)],
+        fadeSpeed: 0.008 + Math.random() * 0.014,
+        delayLeft: Math.random() * 0.3,
+      });
+    }
+  }, 60);
 });
 
 function waveAlpha(waveHead, idx) {
@@ -191,21 +208,19 @@ function loop(now) {
     ctx.restore();
   }
 
-  // Explosión de palabras
+  // Explosión llenando pantalla
   for (const b of burst) {
     if (b.delayLeft > 0) { b.delayLeft -= dt; continue; }
-
-    if (b.alphaDir === 1) {
-      b.alpha += b.speed * 60 * dt;
-      if (b.alpha >= 0.9) { b.alpha = 0.9; b.alphaDir = 0; } // se queda fijo
+    if (b.alpha < 0.92) {
+      b.alpha += b.fadeSpeed * 60 * dt;
+      if (b.alpha > 0.92) b.alpha = 0.92;
     }
-
     ctx.save();
     ctx.globalAlpha = b.alpha;
     ctx.font = `italic ${b.size}px Georgia, serif`;
     ctx.fillStyle = b.color;
     ctx.shadowColor = b.color;
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 8;
     ctx.fillText(b.text, b.x, b.y);
     ctx.restore();
   }
