@@ -31,6 +31,8 @@ const scale = Math.min(W, H) / 48;
 const cx = W / 2;
 const cy = H / 2 + scale;
 
+const TOTAL = 120;
+
 function getHeartPoints(n) {
   const pts = [];
   for (let i = 0; i < n; i++) {
@@ -42,26 +44,7 @@ function getHeartPoints(n) {
   return pts;
 }
 
-const TOTAL = 100;
 const pts = getHeartPoints(TOTAL);
-
-// Encontrar el índice de la punta superior (donde se unen los dos lóbulos)
-// En la ecuación paramétrica, t=PI es la punta de abajo (más baja del corazón)
-// t=0 / t=2PI es justo el centro-arriba donde se unen los lóbulos
-// Buscamos el punto con Y más alta (valor más pequeño en canvas = más arriba)
-// La punta del "valle" superior está cerca de t = PI/2 * ... busquemos el índice real
-let topIdx = 0;
-let topY = Infinity;
-for (let i = 0; i < TOTAL; i++) {
-  // La unión superior de los dos lóbulos es el punto más alto del centro
-  // Es el punto con menor Y (más arriba) cerca del centro horizontal
-  const p = pts[i];
-  const distFromCenter = Math.abs(p.x - cx);
-  if (distFromCenter < scale * 3 && p.y < topY) {
-    topY = p.y;
-    topIdx = i;
-  }
-}
 
 const texts = ['I love you','I love you','I love you','te amo','I love you'];
 const pinks  = ['#ff2d55','#ff6b8a','#ffb3c6','#ff4d6d','#ffffff'];
@@ -70,59 +53,36 @@ const pointData = pts.map((p, i) => ({
   x: p.x,
   y: p.y,
   text:  texts[i % texts.length],
-  color: pinks[i % pinks.length],
-  size:  8 + Math.random() * 5,
+  color: pinks[Math.floor(Math.random() * pinks.length)],
+  size: 7 + Math.random() * 6,
 }));
 
-// Dos olas que salen desde topIdx en direcciones opuestas
-// Ola A: va desde topIdx hacia adelante (índices crecientes) → lado derecho bajando
-// Ola B: va desde topIdx hacia atrás (índices decrecientes) → lado izquierdo bajando
-// Ambas se encuentran en la punta inferior y vuelven
+// Dos olas en la misma dirección, separadas por TOTAL/2
+const WAVE_WIDTH = 22;  // ancho de cada ola en puntos
+const WAVE_SPEED = 25;  // velocidad
+const WAVE_OFFSET = TOTAL / 2; // separación entre ola 1 y ola 2
 
-const WAVE_WIDTH = 42;   // cuántos puntos cubre cada ola
-const WAVE_SPEED = 10;   // puntos por segundo
-
-// Distancia circular entre dos índices (dirección positiva)
-function distForward(from, to, total) {
-  return (to - from + total) % total;
-}
-
-// El corazón tiene TOTAL puntos. topIdx es el punto fijo.
-// La mitad del corazón = TOTAL/2 puntos.
-// Ola A recorre: topIdx → topIdx + TOTAL/2 (pasando por la punta de abajo)
-// Ola B recorre: topIdx → topIdx - TOTAL/2 (en dirección contraria, misma punta)
-// Cuando una ola llega al extremo opuesto (topIdx + TOTAL/2), vuelve a topIdx
-
-let waveA = 0; // offset desde topIdx en dirección +
-let waveB = 0; // offset desde topIdx en dirección -
-const HALF = TOTAL / 2;
+let wave1 = 0;
+let last = performance.now();
 
 // Nicolls flotando
-const pinkColors = ['#ff2d55','#ff6b8a','#ffb3c6','#ff4d6d','#ffffff'];
 const nicolls = Array.from({ length: 10 }, () => ({
   x: Math.random() * W,
   y: Math.random() * H,
-  vx: (Math.random() - 0.5) * 0.6,
-  vy: (Math.random() - 0.5) * 0.6,
+  vx: (Math.random() - 0.5) * 0.5,
+  vy: (Math.random() - 0.5) * 0.5,
   alpha: Math.random(),
   alphaDir: Math.random() > 0.5 ? 1 : -1,
   alphaSpeed: 0.003 + Math.random() * 0.005,
-  size: 13 + Math.random() * 18,
-  color: pinkColors[Math.floor(Math.random() * pinkColors.length)],
+  size: 13 + Math.random() * 16,
+  color: pinks[Math.floor(Math.random() * pinks.length)],
 }));
 
-let last = performance.now();
-
-function getAlpha(waveHead, idx, direction, total) {
-  // Distancia del punto idx a la cabeza de la ola, en la dirección dada
-  let dist;
-  if (direction > 0) {
-    dist = distForward(topIdx, idx, total) - waveHead;
-  } else {
-    dist = distForward(idx, topIdx, total) - waveHead;
-  }
-  // dist negativo = ya pasó la ola, dist > WAVE_WIDTH = aún no llega
-  if (dist < 0 || dist > WAVE_WIDTH) return 0;
+function waveAlpha(waveHead, idx) {
+  // Distancia circular desde idx hasta waveHead (cuánto "atrás" está idx de la cabeza)
+  let dist = (waveHead - idx + TOTAL) % TOTAL;
+  if (dist > WAVE_WIDTH) return 0;
+  // Campana: sube al inicio, baja al final
   return Math.sin((dist / WAVE_WIDTH) * Math.PI);
 }
 
@@ -132,32 +92,28 @@ function loop(now) {
 
   ctx.clearRect(0, 0, W, H);
 
-  // Avanzar olas (se reinician al llegar a HALF)
-  waveA = (waveA + WAVE_SPEED * dt) % HALF;
-  waveB = (waveB + WAVE_SPEED * dt) % HALF;
+  wave1 = (wave1 + WAVE_SPEED * dt) % TOTAL;
+  const wave2 = (wave1 + WAVE_OFFSET) % TOTAL;
 
   for (let i = 0; i < TOTAL; i++) {
     const pd = pointData[i];
 
-    // Alpha de ola A (dirección positiva desde topIdx)
-    const alphaA = getAlpha(waveA, i, 1, TOTAL);
+    const a1 = waveAlpha(wave1, i);
+    const a2 = waveAlpha(wave2, i);
+    const alpha = Math.max(a1, a2);
 
-    // Alpha de ola B (dirección negativa desde topIdx)
-    const alphaB = getAlpha(waveB, i, -1, TOTAL);
-
-    // El punto fijo (topIdx) siempre visible
-    const isFixed = i === topIdx;
-
-    const alpha = isFixed ? 0.9 : Math.max(alphaA, alphaB);
     if (alpha <= 0) continue;
+
+    // Tamaño crece con alpha para dar sensación de profundidad
+    const size = pd.size * (0.6 + 0.8 * alpha);
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.font = `italic ${pd.size}px Georgia, serif`;
-    ctx.fillStyle = isFixed ? '#ffffff' : pd.color;
-    ctx.shadowColor = isFixed ? '#ffffff' : pd.color;
-    ctx.shadowBlur = 12 * alpha;
-    ctx.fillText(pd.text, pd.x - 20, pd.y);
+    ctx.font = `italic ${size}px Georgia, serif`;
+    ctx.fillStyle = pd.color;
+    ctx.shadowColor = pd.color;
+    ctx.shadowBlur = 14 * alpha;
+    ctx.fillText(pd.text, pd.x - 22, pd.y);
     ctx.restore();
   }
 
@@ -168,8 +124,8 @@ function loop(now) {
     if (n.x < 0 || n.x > W) n.vx *= -1;
     if (n.y < 0 || n.y > H) n.vy *= -1;
     n.alpha += n.alphaDir * n.alphaSpeed;
-    if (n.alpha >= 0.85) { n.alpha = 0.85; n.alphaDir = -1; }
-    if (n.alpha <= 0.08) { n.alpha = 0.08; n.alphaDir = 1; }
+    if (n.alpha >= 0.8) { n.alpha = 0.8; n.alphaDir = -1; }
+    if (n.alpha <= 0.05) { n.alpha = 0.05; n.alphaDir = 1; }
 
     ctx.save();
     ctx.globalAlpha = n.alpha;
